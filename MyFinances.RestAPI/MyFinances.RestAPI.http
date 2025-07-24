@@ -1,0 +1,6 @@
+@MyFinances.RestAPI_HostAddress = http://localhost:5183
+
+GET {{MyFinances.RestAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

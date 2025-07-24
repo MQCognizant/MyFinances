@@ -1,0 +1,1085 @@
+Crear una solucion con una aplicacion web, un web api y un proyecto de pruebas unitarias, para la administracion de finanzas personales (registro de ingresos, egresos); 
+Los registros se agrupan por wallet, cada registro es de ingreso o egreso y debe tener una categoria;
+La aplicacion web debe ser un proyecto react + vite de nombre "MyFinances.Web"; 
+El web api debe ser un proyecto en c# de nombre "MyFinances.RestAPI"; 
+El proyecto de pruebas unitarias en C# de nombre "MyFinances.RestApi.Test" que pruebe todos los metodos del proyecto de web api "MyFinances.RestAPI"; 
+La aplicacion web debe tener una pagina de inicio donde muestre todos los registros del mes actual ordenado del mas actual al mas viejo, con un filtro por wallet y otro filtro que permita seleccionar el mes actual y cualquier mes anterior;
+La aplicacion web debe mostrar un menu con las opciones "Home", "Add", "Wallets", "Categories";
+La opcion "Home" debe regresar a la pagina inicial;
+La opcion "Add" debe mostrar un componente donde se puede agregar un nuevo registro, seleccionando con input radio si es de "Ingreso" o "Egreso", seleccionar de una lista la categoria y escribiendo el monto, con los botones "Guardar" y "Cancelar", al presionar cualquiera de los botones debe regresar a la pagina inicial;
+La opcion "Wallets" debe mostrar el catalogo de wallets;
+La opcion "Categories" debe mostrar el catalogo de categories;
+El web api debe usar entityframework.inmemory y agrupar todos los modelos en una carpeta de nombre "Models"
+
+-----------------------------------------------------
+# Create the solution file
+dotnet new sln -n MyFinances
+
+# Create the C# Web API project
+dotnet new webapi -n MyFinances.RestAPI
+dotnet sln add MyFinances.RestAPI/MyFinances.RestAPI.csproj
+
+# Create the C# xUnit test project
+dotnet new xunit -n MyFinances.RestApi.Test
+dotnet sln add MyFinances.RestApi.Test/MyFinances.RestApi.Test.csproj
+
+# Add a reference from the test project to the API project
+dotnet add MyFinances.RestApi.Test/MyFinances.RestApi.Test.csproj reference MyFinances.RestAPI/MyFinances.RestAPI.csproj
+
+# Add required packages to the API project
+dotnet add MyFinances.RestAPI/MyFinances.RestAPI.csproj package Microsoft.EntityFrameworkCore.InMemory
+
+# Add required packages to the Test project
+dotnet add MyFinances.RestApi.Test/MyFinances.RestApi.Test.csproj package Microsoft.EntityFrameworkCore.InMemory
+
+# Create the React + Vite web application
+npm create vite@latest MyFinances.Web -- --template react
+cd MyFinances.Web
+npm install axios react-router-dom
+cd ..
+-----------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class CategoriesController(FinanceContext context) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<Category>>> GetCategories()
+    {
+        return await context.Categories.OrderBy(c => c.Name).ToListAsync();
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Category>> GetCategory(int id)
+    {
+        var category = await context.Categories.FindAsync(id);
+
+        if (category == null)
+        {
+            return NotFound();
+        }
+
+        return category;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Category>> PostCategory(Category category)
+    {
+        context.Categories.Add(category);
+        await context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetCategory), new { id = category.Id }, category);
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class RecordsController(FinanceContext context) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<Record>>> GetRecords([FromQuery] int year, [FromQuery] int month, [FromQuery] int? walletId)
+    {
+        var query = context.Records
+            .Include(r => r.Category)
+            .Include(r => r.Wallet)
+            .Where(r => r.Date.Year == year && r.Date.Month == month)
+            .AsQueryable();
+
+        if (walletId.HasValue)
+        {
+            query = query.Where(r => r.WalletId == walletId.Value);
+        }
+
+        var records = await query.OrderByDescending(r => r.Date).ToListAsync();
+        return records;
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Record>> GetRecord(int id)
+    {
+        var record = await context.Records
+            .Include(r => r.Category)
+            .Include(r => r.Wallet)
+            .FirstOrDefaultAsync(r => r.Id == id);
+
+        if (record == null)
+        {
+            return NotFound();
+        }
+
+        return record;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Record>> PostRecord(Record record)
+    {
+        // The date comes from the client, but we'll force it to be UTC for consistency
+        record.Date = record.Date.ToUniversalTime();
+        context.Records.Add(record);
+        await context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetRecord), new { id = record.Id }, record);
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestAPI.Controllers;
+
+[ApiController]
+[Route("api/[controller]")]
+public class WalletsController(FinanceContext context) : ControllerBase
+{
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<Wallet>>> GetWallets()
+    {
+        return await context.Wallets.OrderBy(w => w.Name).ToListAsync();
+    }
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Wallet>> GetWallet(int id)
+    {
+        var wallet = await context.Wallets.FindAsync(id);
+
+        if (wallet == null)
+        {
+            return NotFound();
+        }
+
+        return wallet;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<Wallet>> PostWallet(Wallet wallet)
+    {
+        context.Wallets.Add(wallet);
+        await context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetWallet), new { id = wallet.Id }, wallet);
+    }
+}
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestAPI.Data;
+
+public class FinanceContext(DbContextOptions<FinanceContext> options) : DbContext(options)
+{
+    public DbSet<Wallet> Wallets { get; set; }
+    public DbSet<Category> Categories { get; set; }
+    public DbSet<Record> Records { get; set; }
+}
+
+
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestAPI.Data;
+
+public static class SeedData
+{
+    public static void Initialize(IServiceProvider serviceProvider)
+    {
+        using var context = new FinanceContext(
+            serviceProvider.GetRequiredService<DbContextOptions<FinanceContext>>());
+
+        // Look for any data.
+        if (context.Wallets.Any() || context.Categories.Any() || context.Records.Any())
+        {
+            return; // DB has been seeded
+        }
+
+        var wallets = new[]
+        {
+            new Wallet { Name = "Main Bank Account" },
+            new Wallet { Name = "Credit Card" },
+            new Wallet { Name = "Cash" }
+        };
+        context.Wallets.AddRange(wallets);
+
+        var categories = new[]
+        {
+            new Category { Name = "Salary" },
+            new Category { Name = "Groceries" },
+            new Category { Name = "Rent" },
+            new Category { Name = "Utilities" },
+            new Category { Name = "Transport" },
+            new Category { Name = "Entertainment" }
+        };
+        context.Categories.AddRange(categories);
+
+        context.SaveChanges();
+
+        var now = DateTime.UtcNow;
+        var records = new[]
+        {
+            new Record { Amount = 2500, RecordType = RecordType.Income, Date = new DateTime(now.Year, now.Month, 1), CategoryId = categories[0].Id, WalletId = wallets[0].Id },
+            new Record { Amount = 150, RecordType = RecordType.Expense, Date = new DateTime(now.Year, now.Month, 2), CategoryId = categories[1].Id, WalletId = wallets[0].Id },
+            new Record { Amount = 800, RecordType = RecordType.Expense, Date = new DateTime(now.Year, now.Month, 5), CategoryId = categories[2].Id, WalletId = wallets[0].Id },
+            new Record { Amount = 75.50m, RecordType = RecordType.Expense, Date = new DateTime(now.Year, now.Month, 10), CategoryId = categories[4].Id, WalletId = wallets[1].Id },
+            new Record { Amount = 45, RecordType = RecordType.Expense, Date = new DateTime(now.Year, now.Month, 12), CategoryId = categories[5].Id, WalletId = wallets[2].Id },
+        };
+
+        // Add a record for last month for testing the filter
+        var lastMonth = now.AddMonths(-1);
+        records = records.Append(
+            new Record { Amount = 50, RecordType = RecordType.Expense, Date = new DateTime(lastMonth.Year, lastMonth.Month, 20), CategoryId = categories[1].Id, WalletId = wallets[0].Id }
+        ).ToArray();
+
+        context.Records.AddRange(records);
+
+        context.SaveChanges();
+    }
+}
+using System.ComponentModel.DataAnnotations;
+
+namespace MyFinances.RestAPI.Models;
+
+public class Category
+{
+    public int Id { get; set; }
+    [Required]
+    public string Name { get; set; } = string.Empty;
+}
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+
+namespace MyFinances.RestAPI.Models;
+
+public class Record
+{
+    public int Id { get; set; }
+    public DateTime Date { get; set; }
+
+    [Column(TypeName = "decimal(18, 2)")]
+    public decimal Amount { get; set; }
+
+    public RecordType RecordType { get; set; }
+
+    public int CategoryId { get; set; }
+    public Category? Category { get; set; }
+    public int WalletId { get; set; }
+    public Wallet? Wallet { get; set; }
+}
+namespace MyFinances.RestAPI.Models;
+
+public enum RecordType
+{
+    Income = 0,
+    Expense = 1
+}
+using System.ComponentModel.DataAnnotations;
+
+namespace MyFinances.RestAPI.Models;
+
+public class Wallet
+{
+    public int Id { get; set; }
+    [Required]
+    public string Name { get; set; } = string.Empty;
+}
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Data;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+builder.Services.AddControllers();
+// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(); 
+
+builder.Services.AddDbContext<FinanceContext>(opt =>
+    opt.UseInMemoryDatabase("MyFinancesDB"));
+
+// Add CORS services
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowReactApp",
+        policy =>
+        {
+            policy.WithOrigins("http://localhost:5173") // Vite's default port
+                  .AllowAnyHeader()
+                  .AllowAnyMethod();
+        });
+});
+
+var app = builder.Build();
+
+// Seed the database
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    SeedData.Initialize(services);
+}
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+}
+
+app.UseHttpsRedirection();
+
+app.UseCors("AllowReactApp");
+
+app.UseAuthorization();
+
+
+-----------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Controllers;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestApi.Test;
+
+public class CategoriesControllerTests
+{
+    private DbContextOptions<FinanceContext> _options;
+
+    public CategoriesControllerTests()
+    {
+        _options = new DbContextOptionsBuilder<FinanceContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString()) // Unique DB for each test run
+            .Options;
+    }
+
+    private async Task SeedContext(FinanceContext context)
+    {
+        context.Categories.AddRange(
+            new Category { Id = 1, Name = "Groceries" },
+            new Category { Id = 2, Name = "Salary" }
+        );
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetCategories_ReturnsAllCategories()
+    {
+        await using var context = new FinanceContext(_options);
+        await SeedContext(context);
+        var controller = new CategoriesController(context);
+
+        var result = await controller.GetCategories();
+
+        var actionResult = Assert.IsType<ActionResult<IEnumerable<Category>>>(result);
+        var categories = Assert.IsAssignableFrom<IEnumerable<Category>>(actionResult.Value);
+        Assert.Equal(2, categories.Count());
+    }
+
+    [Fact]
+    public async Task PostCategory_CreatesCategory()
+    {
+        await using var context = new FinanceContext(_options);
+        var controller = new CategoriesController(context);
+        var newCategory = new Category { Name = "Rent" };
+        await controller.PostCategory(newCategory);
+        Assert.Equal(1, await context.Categories.CountAsync());
+        Assert.Equal("Rent", (await context.Categories.FirstAsync()).Name);
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Controllers;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestApi.Test;
+
+public class RecordsControllerTests
+{
+    private readonly DbContextOptions<FinanceContext> _options;
+
+    public RecordsControllerTests()
+    {
+        _options = new DbContextOptionsBuilder<FinanceContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+    }
+
+    private async Task SeedContext(FinanceContext context)
+    {
+        var wallet = new Wallet { Id = 1, Name = "Main" };
+        var category = new Category { Id = 1, Name = "Food" };
+        context.Wallets.Add(wallet);
+        context.Categories.Add(category);
+
+        var now = DateTime.UtcNow;
+        context.Records.AddRange(
+            new Record { Id = 1, Amount = 100, Date = new DateTime(now.Year, now.Month, 5), RecordType = RecordType.Expense, WalletId = 1, CategoryId = 1 },
+            new Record { Id = 2, Amount = 200, Date = new DateTime(now.Year, now.Month, 10), RecordType = RecordType.Expense, WalletId = 1, CategoryId = 1 },
+            new Record { Id = 3, Amount = 50, Date = now.AddMonths(-1), RecordType = RecordType.Expense, WalletId = 1, CategoryId = 1 } // Last month
+        );
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetRecords_ReturnsRecordsForCurrentMonth()
+    {
+        await using var context = new FinanceContext(_options);
+        await SeedContext(context);
+        var controller = new RecordsController(context);
+        var now = DateTime.UtcNow;
+
+        var result = await controller.GetRecords(now.Year, now.Month, null);
+
+        var actionResult = Assert.IsType<ActionResult<IEnumerable<Record>>>(result);
+        var records = Assert.IsAssignableFrom<IEnumerable<Record>>(actionResult.Value);
+        Assert.Equal(2, records.Count());
+    }
+
+    [Fact]
+    public async Task GetRecords_WithWalletFilter_ReturnsFilteredRecords()
+    {
+        await using var context = new FinanceContext(_options);
+        var wallet1 = new Wallet { Id = 1, Name = "Main" };
+        var wallet2 = new Wallet { Id = 2, Name = "Credit" };
+        var category1 = new Category { Id = 1, Name = "Food" };
+        context.Wallets.AddRange(wallet1, wallet2);
+        context.Categories.Add(category1);
+        var now = DateTime.UtcNow;
+        context.Records.AddRange(
+            new Record { Id = 1, Amount = 100, Date = new DateTime(now.Year, now.Month, 5), RecordType = RecordType.Expense, WalletId = 1, CategoryId = 1 },
+            new Record { Id = 2, Amount = 200, Date = new DateTime(now.Year, now.Month, 10), RecordType = RecordType.Expense, WalletId = 2, CategoryId = 1 }
+        );
+        await context.SaveChangesAsync();
+        var controller = new RecordsController(context);
+
+        var result = await controller.GetRecords(now.Year, now.Month, 2);
+
+        var actionResult = Assert.IsType<ActionResult<IEnumerable<Record>>>(result);
+        var records = Assert.IsAssignableFrom<IEnumerable<Record>>(actionResult.Value);
+        Assert.Single(records);
+        Assert.Equal(2, records.First().WalletId);
+    }
+
+    [Fact]
+    public async Task PostRecord_CreatesRecord()
+    {
+        await using var context = new FinanceContext(_options);
+        await SeedContext(context);
+        var controller = new RecordsController(context);
+        var newRecord = new Record { Amount = 500, Date = DateTime.UtcNow, RecordType = RecordType.Income, WalletId = 1, CategoryId = 1 };
+        await controller.PostRecord(newRecord);
+        Assert.Equal(4, await context.Records.CountAsync());
+    }
+}
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using MyFinances.RestAPI.Controllers;
+using MyFinances.RestAPI.Data;
+using MyFinances.RestAPI.Models;
+
+namespace MyFinances.RestApi.Test;
+
+public class WalletsControllerTests
+{
+    private readonly DbContextOptions<FinanceContext> _options;
+
+    public WalletsControllerTests()
+    {
+        _options = new DbContextOptionsBuilder<FinanceContext>()
+            .UseInMemoryDatabase(databaseName: Guid.NewGuid().ToString())
+            .Options;
+    }
+
+    private async Task SeedContext(FinanceContext context)
+    {
+        context.Wallets.AddRange(
+            new Wallet { Id = 1, Name = "Main" },
+            new Wallet { Id = 2, Name = "Credit Card" }
+        );
+        await context.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task GetWallets_ReturnsAllWallets()
+    {
+        await using var context = new FinanceContext(_options);
+        await SeedContext(context);
+        var controller = new WalletsController(context);
+
+        var result = await controller.GetWallets();
+
+        var actionResult = Assert.IsType<ActionResult<IEnumerable<Wallet>>>(result);
+        var wallets = Assert.IsAssignableFrom<IEnumerable<Wallet>>(actionResult.Value);
+        Assert.Equal(2, wallets.Count());
+    }
+
+    [Fact]
+    public async Task PostWallet_CreatesWallet()
+    {
+        await using var context = new FinanceContext(_options);
+        var controller = new WalletsController(context);
+        var newWallet = new Wallet { Name = "Savings" };
+        await controller.PostWallet(newWallet);
+        Assert.Equal(1, await context.Wallets.CountAsync());
+        Assert.Equal("Savings", (await context.Wallets.FirstAsync()).Name);
+    }
+}
+
+-----------------------------------------------------
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MyFinances</title>
+  </head>
+  <body>
+    <div id="root"></div>
+{
+  "name": "myfinances.web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.23.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.66",
+    "@types/react-dom": "^18.2.22",
+    "@vitejs/plugin-react": "^4.2.1",
+    "eslint": "^8.57.0",
+    "eslint-plugin-react": "^7.34.1",
+import { Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import Home from './pages/Home';
+import AddRecord from './pages/AddRecord';
+import Wallets from './pages/Wallets';
+import Categories from './pages/Categories';
+
+function App() {
+  return (
+    <Layout>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/add" element={<AddRecord />} />
+        <Route path="/wallets" element={<Wallets />} />
+        <Route path="/categories" element={<Categories />} />
+      </Routes>
+    </Layout>
+  );
+}
+
+export default App;
+import { Link } from 'react-router-dom';
+
+const Layout = ({ children }) => {
+  return (
+    <div className="app-container">
+      <header className="app-header">
+        <h1>MyFinances</h1>
+        <nav>
+          <Link to="/">Home</Link>
+          <Link to="/add">Add</Link>
+          <Link to="/wallets">Wallets</Link>
+          <Link to="/categories">Categories</Link>
+        </nav>
+      </header>
+      <main className="app-main">
+        {children}
+      </main>
+    </div>
+  );
+};
+
+export default Layout;
+/* General Styles */
+body {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #f4f7f6;
+  color: #333;
+  margin: 0;
+}
+
+.app-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* Header & Nav */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #ffffff;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.app-header nav a {
+  margin-left: 1.5rem;
+  text-decoration: none;
+  color: #3498db;
+  font-weight: 500;
+  transition: color 0.3s;
+}
+
+.app-header nav a:hover {
+  color: #2980b9;
+}
+
+/* Main Content */
+.app-main {
+  background-color: #ffffff;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Forms and Inputs */
+.form-container, .catalog-container {
+  max-width: 500px;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group select {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.radio-group label {
+  margin-right: 1rem;
+}
+
+.button-group {
+  margin-top: 1.5rem;
+}
+
+button {
+  padding: 0.75rem 1.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  margin-right: 0.5rem;
+}
+
+.btn-primary {
+  background-color: #3498db;
+  color: white;
+}
+
+.btn-secondary {
+  background-color: #ecf0f1;
+  color: #333;
+}
+
+/* Tables and Lists */
+.record-list, .catalog-list {
+  list-style: none;
+  padding: 0;
+}
+
+.record-item, .catalog-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 1rem;
+  border-bottom: 1px solid #eee;
+}
+
+.record-item:last-child {
+  border-bottom: none;
+}
+
+.record-item .amount-income {
+  color: #2ecc71;
+  font-weight: bold;
+}
+
+.record-item .amount-expense {
+  color: #e74c3c;
+  font-weight: bold;
+}
+
+.filters {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom';
+import App from './App.jsx'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <App />
+    </BrowserRouter>
+  </React.StrictMode>,
+)
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import api from '../services/api';
+
+const AddRecord = () => {
+  const [recordType, setRecordType] = useState('1'); // 1 for Expense
+  const [amount, setAmount] = useState('');
+  const [categoryId, setCategoryId] = useState('');
+  const [walletId, setWalletId] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [wallets, setWallets] = useState([]);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    api.getCategories().then(response => setCategories(response.data));
+    api.getWallets().then(response => setWallets(response.data));
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!amount || !categoryId || !walletId) {
+      alert('Please fill all fields');
+      return;
+    }
+    const newRecord = {
+      amount: parseFloat(amount),
+      recordType: parseInt(recordType),
+      categoryId: parseInt(categoryId),
+      walletId: parseInt(walletId),
+      date: new Date().toISOString(),
+    };
+    await api.addRecord(newRecord);
+    navigate('/');
+  };
+
+  return (
+    <div className="form-container">
+      <h2>Add New Record</h2>
+      <form onSubmit={handleSubmit}>
+        <div className="form-group radio-group">
+          <label>
+            <input type="radio" value="1" checked={recordType === '1'} onChange={(e) => setRecordType(e.target.value)} />
+            Expense
+          </label>
+          <label>
+            <input type="radio" value="0" checked={recordType === '0'} onChange={(e) => setRecordType(e.target.value)} />
+            Income
+          </label>
+        </div>
+        <div className="form-group">
+          <label>Amount</label>
+          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" required />
+        </div>
+        <div className="form-group">
+          <label>Category</label>
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} required>
+            <option value="">Select Category</option>
+            {categories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Wallet</label>
+          <select value={walletId} onChange={(e) => setWalletId(e.target.value)} required>
+            <option value="">Select Wallet</option>
+            {wallets.map(w => <option key={w.id} value={w.id}>{w.name}</option>)}
+          </select>
+        </div>
+        <div className="button-group">
+          <button type="submit" className="btn-primary">Save</button>
+          <button type="button" className="btn-secondary" onClick={() => navigate('/')}>Cancel</button>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+export default AddRecord;
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+
+const Categories = () => {
+  const [categories, setCategories] = useState([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+
+  const fetchCategories = () => {
+    api.getCategories().then(response => {
+      setCategories(response.data);
+    });
+  };
+
+  useEffect(() => {
+    fetchCategories();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newCategoryName.trim()) return;
+    await api.addCategory({ name: newCategoryName });
+    setNewCategoryName('');
+    fetchCategories(); // Refresh list
+  };
+
+  return (
+    <div className="catalog-container">
+      <h2>Categories</h2>
+      <form onSubmit={handleSubmit} className="form-group">
+        <input
+          type="text"
+          value={newCategoryName}
+          onChange={(e) => setNewCategoryName(e.target.value)}
+          placeholder="New category name"
+        />
+        <button type="submit" className="btn-primary">Add Category</button>
+      </form>
+      <ul className="catalog-list">
+        {categories.map(category => (
+          <li key={category.id} className="catalog-item">
+            {category.name}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default Categories;
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+
+const Home = () => {
+  const [records, setRecords] = useState([]);
+  const [wallets, setWallets] = useState([]);
+  const [selectedWallet, setSelectedWallet] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  const [monthOptions, setMonthOptions] = useState([]);
+
+  useEffect(() => {
+    // Generate month options for the last 12 months
+    const options = [];
+    const now = new Date();
+    for (let i = 0; i < 12; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      const label = date.toLocaleString('default', { month: 'long', year: 'numeric' });
+      options.push({ value, label });
+    }
+    setMonthOptions(options);
+  }, []);
+
+  useEffect(() => {
+    api.getWallets().then(response => {
+      setWallets(response.data);
+    });
+  }, []);
+
+  useEffect(() => {
+    const [year, month] = selectedMonth.split('-');
+    api.getRecords(year, month, selectedWallet || null).then(response => {
+      setRecords(response.data);
+    });
+  }, [selectedWallet, selectedMonth]);
+
+  return (
+    <div>
+      <h2>Monthly Records</h2>
+      <div className="filters">
+        <div className="form-group">
+          <label>Filter by Month</label>
+          <select value={selectedMonth} onChange={e => setSelectedMonth(e.target.value)}>
+            {monthOptions.map(opt => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Filter by Wallet</label>
+          <select value={selectedWallet} onChange={e => setSelectedWallet(e.target.value)}>
+            <option value="">All Wallets</option>
+            {wallets.map(wallet => (
+              <option key={wallet.id} value={wallet.id}>{wallet.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <ul className="record-list">
+        {records.length > 0 ? records.map(record => (
+          <li key={record.id} className="record-item">
+            <div>
+              <strong>{record.category.name}</strong>
+              <br />
+              <small>{new Date(record.date).toLocaleDateString()} - {record.wallet.name}</small>
+            </div>
+            <div className={record.recordType === 0 ? 'amount-income' : 'amount-expense'}>
+              {record.recordType === 0 ? '+' : '-'}
+              ${record.amount.toFixed(2)}
+            </div>
+          </li>
+        )) : (
+          <p>No records found for this period.</p>
+        )}
+      </ul>
+    </div>
+  );
+};
+
+export default Home;
+import { useState, useEffect } from 'react';
+import api from '../services/api';
+
+const Wallets = () => {
+  const [wallets, setWallets] = useState([]);
+  const [newWalletName, setNewWalletName] = useState('');
+
+  const fetchWallets = () => {
+    api.getWallets().then(response => {
+      setWallets(response.data);
+    });
+  };
+
+  useEffect(() => {
+    fetchWallets();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!newWalletName.trim()) return;
+    await api.addWallet({ name: newWalletName });
+    setNewWalletName('');
+    fetchWallets(); // Refresh list
+  };
+
+  return (
+    <div className="catalog-container">
+      <h2>Wallets</h2>
+      <form onSubmit={handleSubmit} className="form-group">
+        <input
+          type="text"
+          value={newWalletName}
+          onChange={(e) => setNewWalletName(e.target.value)}
+          placeholder="New wallet name"
+        />
+        <button type="submit" className="btn-primary">Add Wallet</button>
+      </form>
+      <ul className="catalog-list">
+        {wallets.map(wallet => (
+          <li key={wallet.id} className="catalog-item">
+            {wallet.name}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+export default Wallets;
+import axios from 'axios';
+
+const apiClient = axios.create({
+  baseURL: 'https://localhost:7199/api', // Adjust the port if your API runs on a different one
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export default {
+  getRecords: (year, month, walletId) => {
+    let url = `/records?year=${year}&month=${month}`;
+    if (walletId) {
+      url += `&walletId=${walletId}`;
+    }
+    return apiClient.get(url);
+  },
+  addRecord: (record) => apiClient.post('/records', record),
+  getWallets: () => apiClient.get('/wallets'),
+  addWallet: (wallet) => apiClient.post('/wallets', wallet),
+  getCategories: () => apiClient.get('/categories'),
+  addCategory: (category) => apiClient.post('/categories', category),
+};
+
+-----------------------------------------------------
+How to Run the Solution
+Start the API:
+
+Navigate to the MyFinances.RestAPI directory.
+Run dotnet run.
+The API will start, likely on a port like 7199 (check the console output). Make sure the baseURL in MyFinances.Web/src/services/api.js matches this port.
+Start the Web App:
+
+In a new terminal, navigate to the MyFinances.Web directory.
+Run npm run dev.
+Open your browser and go to http://localhost:5173.
+You should now have a fully functional personal finance application running locally.
+-----------------------------------------------------
+
+add swagger to MyFinances.RestAPI
+-----------------------------------------------------
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+
+app.UseCors("AllowReactApp");
+
+app.UseAuthorization();
+
+app.MapControllers();
+
+app.Run();
+
+
+-----------------------------------------------------
+-----------------------------------------------------
+-----------------------------------------------------
+-----------------------------------------------------
+-----------------------------------------------------

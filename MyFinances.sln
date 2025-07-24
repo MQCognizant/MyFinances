@@ -1,0 +1,28 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyFinances.RestAPI", "MyFinances.RestAPI\MyFinances.RestAPI.csproj", "{52001AAC-BF47-4CD0-BE8F-30C399751516}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MyFinances.RestApi.Test", "MyFinances.RestApi.Test\MyFinances.RestApi.Test.csproj", "{67A997E0-D163-4D71-8717-D81EB3075F82}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{52001AAC-BF47-4CD0-BE8F-30C399751516}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52001AAC-BF47-4CD0-BE8F-30C399751516}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52001AAC-BF47-4CD0-BE8F-30C399751516}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52001AAC-BF47-4CD0-BE8F-30C399751516}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67A997E0-D163-4D71-8717-D81EB3075F82}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67A997E0-D163-4D71-8717-D81EB3075F82}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67A997E0-D163-4D71-8717-D81EB3075F82}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67A997E0-D163-4D71-8717-D81EB3075F82}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

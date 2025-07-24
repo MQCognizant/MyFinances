@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "shdOnCjHhHDoD5wIDTyphLAScf79E/rPHxJEk6n19dw=",
+  "Source": "MyFinances.RestAPI",
+  "BasePath": "_content/MyFinances.RestAPI",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
